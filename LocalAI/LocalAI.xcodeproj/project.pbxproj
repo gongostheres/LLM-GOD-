@@ -28,7 +28,7 @@
 		04D1D31B753AFFA067216570 /* LocalAIApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalAIApp.swift; sourceTree = "<group>"; };
 		10715E39AB0442FEEA88CA3F /* ModelLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelLibraryView.swift; sourceTree = "<group>"; };
 		151FA56F482B06A62DFAC64D /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
-		167B7AACFE1A442B26C7473D /* LocalAI.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LocalAI.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		167B7AACFE1A442B26C7473D /* LocalAI.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = LocalAI.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4814641F446DA16F861F4C54 /* LocalAI.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = LocalAI.entitlements; sourceTree = "<group>"; };
 		4DB2FE9362CFCB01278465B4 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		5C7F4E4D531573B5E897F5A5 /* InferenceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceService.swift; sourceTree = "<group>"; };
@@ -149,6 +149,12 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					5A7C66B1DF60E38F77B0CD6A = {
+						DevelopmentTeam = ACMTJ266DY;
+						ProvisioningStyle = Manual;
+					};
+				};
 			};
 			buildConfigurationList = D77CA1FD32591A559D217E54 /* Build configuration list for PBXProject "LocalAI" */;
 			developmentRegion = en;
@@ -202,8 +208,8 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = LocalAI/LocalAI.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = GR227CS444;
+				CODE_SIGN_STYLE = Manual;
+				DEVELOPMENT_TEAM = ACMTJ266DY;
 				ENABLE_HARDENED_RUNTIME = NO;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = LocalAI/Info.plist;
@@ -348,8 +354,8 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = LocalAI/LocalAI.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = GR227CS444;
+				CODE_SIGN_STYLE = Manual;
+				DEVELOPMENT_TEAM = ACMTJ266DY;
 				ENABLE_HARDENED_RUNTIME = NO;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = LocalAI/Info.plist;

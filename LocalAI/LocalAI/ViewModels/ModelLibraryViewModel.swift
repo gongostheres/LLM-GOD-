@@ -7,6 +7,8 @@ final class ModelLibraryViewModel {
     var models: [AIModel] = []
     var downloadProgress: [String: Double] = [:]
     var downloadingIds: Set<String> = []
+    var connectingIds: Set<String> = []      // waiting for first byte
+    var failedIds: Set<String> = []
     var errorMessage: String?
 
     private let key = "downloaded_model_ids"
@@ -26,11 +28,29 @@ final class ModelLibraryViewModel {
     func download(_ model: AIModel) {
         guard !downloadingIds.contains(model.id) else { return }
         downloadingIds.insert(model.id)
+        connectingIds.insert(model.id)
         downloadProgress[model.id] = 0
+
         Task {
             do {
-                try await InferenceService.shared.preloadModel(model) { [weak self] p in
-                    Task { @MainActor [weak self] in self?.downloadProgress[model.id] = p }
+                try await InferenceService.shared.preloadModel(model) { [weak self] completed, total in
+                    Task { @MainActor [weak self] in
+                        guard let self else { return }
+
+                        // First byte received — leave connecting state
+                        if self.connectingIds.contains(model.id) {
+                            self.connectingIds.remove(model.id)
+                        }
+
+                        // Accurate fraction from file count
+                        let fraction: Double
+                        if total > 0 {
+                            fraction = Double(completed) / Double(total)
+                        } else {
+                            fraction = 0
+                        }
+                        self.downloadProgress[model.id] = fraction
+                    }
                 }
                 await markDownloaded(model.id)
             } catch {
@@ -38,6 +58,11 @@ final class ModelLibraryViewModel {
             }
             await endDownload(model.id)
         }
+    }
+
+    func retry(_ model: AIModel) {
+        failedIds.remove(model.id)
+        download(model)
     }
 
     func delete(_ model: AIModel) {
@@ -48,11 +73,16 @@ final class ModelLibraryViewModel {
     // MARK: - Private
 
     @MainActor private func markDownloaded(_ id: String) { setDownloaded(id, value: true) }
+
     @MainActor private func endDownload(_ id: String) {
         downloadingIds.remove(id)
+        connectingIds.remove(id)
         downloadProgress.removeValue(forKey: id)
+        // keep failedIds as-is so UI can show retry
     }
+
     @MainActor private func fail(_ id: String, message: String) {
+        failedIds.insert(id)
         errorMessage = "Ошибка загрузки: \(message)"
     }
 

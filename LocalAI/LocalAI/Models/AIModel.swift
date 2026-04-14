@@ -31,12 +31,12 @@ struct AIModel: Identifiable, Codable, Hashable {
             iconName: "bolt.fill", accentHex: "5E5CE6", badge: nil
         ),
         AIModel(
-            id: "mlx-community/gemma-3-4b-it-4bit",
-            name: "Gemma 3",
-            subtitle: "Google DeepMind · 4B · отличные диалоги",
-            sizeGB: 2.5, minRAMGB: 6, category: .medium,
-            contextLength: 8192,
-            iconName: "atom", accentHex: "34C759", badge: nil
+            id: "mlx-community/Llama-3.2-3B-Instruct-4bit",
+            name: "Llama 3.2",
+            subtitle: "Meta · 3B · быстрый, хорош для диалогов",
+            sizeGB: 1.8, minRAMGB: 4, category: .medium,
+            contextLength: 131072,
+            iconName: "hare.fill", accentHex: "34C759", badge: nil
         ),
         AIModel(
             id: "mlx-community/Mistral-7B-Instruct-v0.3-4bit",

@@ -130,9 +130,17 @@ struct ChatView: View {
                         ChatBubble(message: msg)
                             .id(msg.id)
                             .transition(.asymmetric(
-                                insertion: .move(edge: msg.role == .user ? .trailing : .leading).combined(with: .opacity),
+                                insertion: .scale(scale: 0.72, anchor: msg.role == .user ? .bottomTrailing : .bottomLeading).combined(with: .opacity),
                                 removal: .opacity
                             ))
+                            .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                                Button(role: .destructive) {
+                                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                    vm.deleteMessage(msg)
+                                } label: {
+                                    Label("Удалить", systemImage: "trash")
+                                }
+                            }
                     }
                     if vm.isGenerating {
                         StreamingChatBubble(text: vm.streamingContent, isModelLoading: vm.isModelLoading)
@@ -260,28 +268,39 @@ struct ChatView: View {
                 .padding(.vertical, 12)
                 .disabled(vm.isGenerating)
 
-            Button {
-                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                vm.send()
-            } label: {
-                Image(systemName: "arrow.up")
-                    .font(.system(size: 16, weight: .black))
-                    .foregroundStyle(.white)
-                    .frame(width: 38, height: 38)
-                    .background {
-                        Circle()
-                            .fill(canSend
+            if vm.isGenerating {
+                Button { vm.stopGeneration() } label: {
+                    Image(systemName: "stop.fill")
+                        .font(.system(size: 13, weight: .black))
+                        .foregroundStyle(.white)
+                        .frame(width: 38, height: 38)
+                        .background(Circle().fill(Color.white.opacity(0.14)))
+                }
+                .buttonStyle(PressButtonStyle())
+                .padding(.trailing, 6)
+                .padding(.bottom, 6)
+                .transition(.scale.combined(with: .opacity))
+            } else {
+                Button {
+                    vm.send()
+                } label: {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 16, weight: .black))
+                        .foregroundStyle(.white)
+                        .frame(width: 38, height: 38)
+                        .background {
+                            Circle().fill(canSend
                                 ? AnyShapeStyle(Color.violet)
-                                : AnyShapeStyle(Color.white.opacity(0.08))
-                            )
-                    }
-                    .glow(canSend ? Color.violet : .clear, radius: 10)
+                                : AnyShapeStyle(Color.white.opacity(0.08)))
+                        }
+                        .glow(canSend ? Color.violet : .clear, radius: 10)
+                }
+                .buttonStyle(PressButtonStyle())
+                .disabled(!canSend)
+                .padding(.trailing, 6)
+                .padding(.bottom, 6)
+                .transition(.scale.combined(with: .opacity))
             }
-            .buttonStyle(PressButtonStyle())
-            .disabled(!canSend)
-            .padding(.trailing, 6)
-            .padding(.bottom, 6)
-            .animation(.spring(response: 0.3), value: canSend)
         }
         .background {
             RoundedRectangle(cornerRadius: 26, style: .continuous)
@@ -438,30 +457,36 @@ struct ChatBubble: View {
             }
 
             VStack(alignment: isUser ? .trailing : .leading, spacing: 5) {
-                Text(message.content)
-                    .font(.system(size: 16))
-                    .foregroundStyle(isUser ? .white : Color.txt1)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background {
-                        if isUser {
-                            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                                .fill(Color.violet)
-                        } else {
-                            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                                .fill(Color.surfaceHi)
-                                .overlay {
-                                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                                        .strokeBorder(Color.borderHi, lineWidth: 0.5)
-                                }
-                        }
+                Group {
+                    if isUser {
+                        Text(message.content)
+                            .font(.system(size: 16))
+                            .foregroundStyle(Color.white)
+                    } else {
+                        MarkdownText(content: message.content)
                     }
-                    .contextMenu {
-                        Button {
-                            UIPasteboard.general.string = message.content
-                            UINotificationFeedbackGenerator().notificationOccurred(.success)
-                        } label: { Label("Копировать", systemImage: "doc.on.doc") }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background {
+                    if isUser {
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .fill(Color.violet)
+                    } else {
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .fill(Color.surfaceHi)
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                    .strokeBorder(Color.borderHi, lineWidth: 0.5)
+                            }
                     }
+                }
+                .contextMenu {
+                    Button {
+                        UIPasteboard.general.string = message.content
+                        UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    } label: { Label("Копировать", systemImage: "doc.on.doc") }
+                }
 
                 if let tps = message.tokensPerSecond, tps > 0 {
                     Text(String(format: "%.0f tok/s", tps))
@@ -569,5 +594,86 @@ struct StreamingChatBubble: View {
             }
         }
         .onReceive(timer) { _ in dotPhase = (dotPhase + 1) % 3 }
+    }
+}
+
+// MARK: - Markdown renderer
+
+struct MarkdownText: View {
+    let content: String
+
+    private struct Block: Identifiable {
+        let id = UUID()
+        enum Kind { case prose(String), code(lang: String, body: String) }
+        let kind: Kind
+    }
+
+    private var blocks: [Block] {
+        var result: [Block] = []
+        var inCode = false
+        var codeLang = ""
+        var codeLines: [String] = []
+        var proseLines: [String] = []
+
+        for line in content.components(separatedBy: "\n") {
+            if line.hasPrefix("```") {
+                if inCode {
+                    result.append(Block(kind: .code(lang: codeLang, body: codeLines.joined(separator: "\n"))))
+                    codeLines = []; inCode = false
+                } else {
+                    if !proseLines.isEmpty {
+                        result.append(Block(kind: .prose(proseLines.joined(separator: "\n"))))
+                        proseLines = []
+                    }
+                    codeLang = String(line.dropFirst(3)); inCode = true
+                }
+            } else if inCode {
+                codeLines.append(line)
+            } else {
+                proseLines.append(line)
+            }
+        }
+        if inCode && !codeLines.isEmpty {
+            result.append(Block(kind: .code(lang: codeLang, body: codeLines.joined(separator: "\n"))))
+        } else if !proseLines.isEmpty {
+            result.append(Block(kind: .prose(proseLines.joined(separator: "\n"))))
+        }
+        return result
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(blocks) { block in
+                switch block.kind {
+                case .prose(let text):
+                    let opts = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+                    let attr = (try? AttributedString(markdown: text, options: opts)) ?? AttributedString(text)
+                    Text(attr)
+                        .font(.system(size: 16))
+                        .foregroundStyle(Color.txt1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                case .code(let lang, let body):
+                    VStack(alignment: .leading, spacing: 0) {
+                        if !lang.isEmpty {
+                            Text(lang.isEmpty ? "code" : lang)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(Color.txt3)
+                                .padding(.horizontal, 12)
+                                .padding(.top, 8)
+                        }
+                        Text(body)
+                            .font(.system(size: 13, design: .monospaced))
+                            .foregroundStyle(Color.txt2)
+                            .padding(12)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .background(Color.bg, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .strokeBorder(Color.borderHi, lineWidth: 0.5)
+                    }
+                }
+            }
+        }
     }
 }

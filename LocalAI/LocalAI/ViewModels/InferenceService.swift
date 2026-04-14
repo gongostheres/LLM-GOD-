@@ -64,6 +64,7 @@ final class InferenceService: @unchecked Sendable {
         var charCount = 0
 
         for try await chunk in session.streamResponse(to: userMessage) {
+            try Task.checkCancellation()
             onToken(chunk)
             charCount += chunk.count
             let elapsed = Date().timeIntervalSince(start)
@@ -76,11 +77,24 @@ final class InferenceService: @unchecked Sendable {
 
     // MARK: - Preload
 
-    func preloadModel(_ model: AIModel, onProgress: @escaping (Double) -> Void) async throws {
-        _ = try await LLMModelFactory.shared.loadContainer(
-            configuration: ModelConfiguration(id: model.id),
-            progressHandler: { onProgress($0.fractionCompleted) }
-        )
+    func preloadModel(
+        _ model: AIModel,
+        onProgress: @escaping (_ completed: Int64, _ total: Int64) -> Void
+    ) async throws {
+        do {
+            _ = try await LLMModelFactory.shared.loadContainer(
+                configuration: ModelConfiguration(id: model.id),
+                progressHandler: { progress in
+                    onProgress(progress.completedUnitCount, progress.totalUnitCount)
+                }
+            )
+        } catch {
+            let msg = error.localizedDescription.lowercased()
+            if msg.contains("memory") || msg.contains("allocation") || msg.contains("killed") {
+                throw InferenceError.outOfMemory
+            }
+            throw error
+        }
     }
 
     // MARK: - Evict
@@ -109,18 +123,34 @@ final class InferenceService: @unchecked Sendable {
             return c
         }
         lock.unlock()
-        let container = try await LLMModelFactory.shared.loadContainer(
-            configuration: ModelConfiguration(id: model.id),
-            progressHandler: { _ in }
-        )
-        lock.lock()
-        loadedContainer = container
-        loadedModelId = model.id
-        lock.unlock()
-        return container
+        do {
+            let container = try await LLMModelFactory.shared.loadContainer(
+                configuration: ModelConfiguration(id: model.id),
+                progressHandler: { _ in }
+            )
+            lock.lock()
+            loadedContainer = container
+            loadedModelId = model.id
+            lock.unlock()
+            return container
+        } catch {
+            let msg = error.localizedDescription.lowercased()
+            if msg.contains("memory") || msg.contains("allocation") || msg.contains("killed") {
+                throw InferenceError.outOfMemory
+            }
+            throw error
+        }
     }
 }
 
-enum InferenceError: Error {
+enum InferenceError: LocalizedError {
     case noSession
+    case outOfMemory
+
+    var errorDescription: String? {
+        switch self {
+        case .noSession: return "Сессия не инициализирована"
+        case .outOfMemory: return "Недостаточно памяти. Попробуйте Llama 3.2 или Phi-3.5 Mini"
+        }
+    }
 }

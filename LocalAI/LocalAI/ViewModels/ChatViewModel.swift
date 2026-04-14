@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import UIKit
 
 @Observable
 final class ChatViewModel {
@@ -18,12 +19,11 @@ final class ChatViewModel {
 
     private let systemPrompt = "Ты — умный и полезный AI-ассистент. Отвечай на русском, если вопрос задан на русском."
     private let saveKey = "conversations_v1"
+    private var generationTask: Task<Void, Never>?
 
     // MARK: - Init
 
-    init() {
-        loadConversations()
-    }
+    init() { loadConversations() }
 
     // MARK: - Computed
 
@@ -69,28 +69,63 @@ final class ChatViewModel {
         saveConversations()
     }
 
+    func deleteMessage(_ msg: ChatMessage) {
+        guard let convId = currentConversation?.id,
+              let idx = conversations.firstIndex(where: { $0.id == convId }) else { return }
+        conversations[idx].messages.removeAll { $0.id == msg.id }
+        currentConversation = conversations[idx]
+        saveConversations()
+    }
+
+    // MARK: - Stop
+
+    func stopGeneration() {
+        generationTask?.cancel()
+        generationTask = nil
+        let partial = streamingContent
+        let convId = currentConversation?.id
+        Task { @MainActor in
+            if !partial.isEmpty, let id = convId {
+                self.commit(partial, speed: self.currentSpeed, to: id)
+            }
+            self.finishGenerating()
+        }
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
+
     // MARK: - Send
 
     func send() {
         let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, let model = selectedModel, !isGenerating else { return }
 
-        if currentConversation == nil {
-            newConversation(model: model)
-        }
+        if currentConversation == nil { newConversation(model: model) }
         guard let convId = currentConversation?.id else { return }
+
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
 
         inputText = ""
         appendMessage(ChatMessage(role: .user, content: text), to: convId)
+
+        // Auto-title from first user message
+        if let idx = conversations.firstIndex(where: { $0.id == convId }),
+           conversations[idx].messages.filter({ $0.role == .user }).count == 1 {
+            let title = String(text.prefix(50))
+            conversations[idx].title = title
+            if currentConversation?.id == convId { currentConversation?.title = title }
+            saveConversations()
+        }
+
         isGenerating = true
         isModelLoading = true
         streamingContent = ""
         currentSpeed = 0
 
-        Task {
+        generationTask = Task {
             do {
                 var full = ""
                 var lastSpeed = 0.0
+                var firstToken = true
                 try await InferenceService.shared.generate(
                     userMessage: text,
                     model: model,
@@ -99,18 +134,23 @@ final class ChatViewModel {
                     onToken: { [weak self] chunk in
                         full += chunk
                         Task { @MainActor [weak self] in
-                            self?.isModelLoading = false
+                            if firstToken {
+                                firstToken = false
+                                self?.isModelLoading = false
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            }
                             self?.streamingContent = full
                         }
                     },
                     onSpeed: { speed in
                         lastSpeed = speed
-                        Task { @MainActor [weak self] in
-                            self?.currentSpeed = speed
-                        }
+                        Task { @MainActor [weak self] in self?.currentSpeed = speed }
                     }
                 )
                 await commit(full, speed: lastSpeed, to: convId)
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+            } catch is CancellationError {
+                // stopGeneration() already handled commit
             } catch {
                 await setError(error.localizedDescription)
             }
@@ -124,9 +164,7 @@ final class ChatViewModel {
         guard let idx = conversations.firstIndex(where: { $0.id == convId }) else { return }
         conversations[idx].messages.append(msg)
         conversations[idx].updatedAt = Date()
-        if currentConversation?.id == convId {
-            currentConversation = conversations[idx]
-        }
+        if currentConversation?.id == convId { currentConversation = conversations[idx] }
     }
 
     @MainActor
@@ -142,6 +180,7 @@ final class ChatViewModel {
         isGenerating = false
         isModelLoading = false
         currentSpeed = 0
+        generationTask = nil
     }
 
     @MainActor
@@ -150,13 +189,13 @@ final class ChatViewModel {
         isGenerating = false
         isModelLoading = false
         streamingContent = ""
+        generationTask = nil
     }
 
     // MARK: - Persistence
 
     private func saveConversations() {
-        let maxConversations = 50
-        let toSave = Array(conversations.prefix(maxConversations))
+        let toSave = Array(conversations.prefix(50))
         if let data = try? JSONEncoder().encode(toSave) {
             UserDefaults.standard.set(data, forKey: saveKey)
         }

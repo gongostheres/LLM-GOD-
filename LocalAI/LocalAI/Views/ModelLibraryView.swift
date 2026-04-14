@@ -1,9 +1,13 @@
 import SwiftUI
+import Darwin
 
 struct ModelLibraryView: View {
     @Environment(ModelLibraryViewModel.self) private var vm
     @Environment(ChatViewModel.self) private var chatVM
     @Binding var selectedTab: Int
+
+    @State private var freeRAMGB: Double = 0
+    private let totalRAMGB: Double = Double(ProcessInfo.processInfo.physicalMemory) / 1_073_741_824
 
     var body: some View {
         ZStack {
@@ -17,6 +21,8 @@ struct ModelLibraryView: View {
                             index: index,
                             progress: vm.downloadProgress[model.id],
                             isDownloading: vm.downloadingIds.contains(model.id),
+                            isConnecting: vm.connectingIds.contains(model.id),
+                            isFailed: vm.failedIds.contains(model.id),
                             onAction: {
                                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                                 if model.isDownloaded {
@@ -26,6 +32,7 @@ struct ModelLibraryView: View {
                                     vm.download(model)
                                 }
                             },
+                            onRetry: { vm.retry(model) },
                             onDelete: { vm.delete(model) }
                         )
                     }
@@ -42,7 +49,7 @@ struct ModelLibraryView: View {
     }
 
     private var header: some View {
-        HStack {
+        HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Модели")
                     .font(.system(size: 32, weight: .black))
@@ -52,8 +59,49 @@ struct ModelLibraryView: View {
                     .foregroundStyle(Color.txt2)
             }
             Spacer()
+            ramIndicator
         }
         .padding(.top, 8)
+        .task {
+            while !Task.isCancelled {
+                freeRAMGB = Double(os_proc_available_memory()) / 1_073_741_824
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+            }
+        }
+    }
+
+    private var ramIndicator: some View {
+        let ramColor: Color = freeRAMGB > 3 ? Color(hex: "34C759")
+                            : freeRAMGB > 1.5 ? Color(hex: "FF9F0A")
+                            : Color(hex: "FF453A")
+        return VStack(alignment: .trailing, spacing: 2) {
+            HStack(spacing: 4) {
+                Image(systemName: "memorychip")
+                    .font(.system(size: 10))
+                    .foregroundStyle(Color.txt3)
+                Text("ОЗУ")
+                    .font(.system(size: 10))
+                    .foregroundStyle(Color.txt3)
+            }
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                Text(String(format: "%.1f", freeRAMGB))
+                    .font(.system(size: 15, weight: .bold, design: .monospaced))
+                    .foregroundStyle(ramColor)
+                Text("/ \(Int(totalRAMGB.rounded())) ГБ")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(Color.txt3)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.surface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(Color.borderHi, lineWidth: 0.5)
+                )
+        )
     }
 }
 
@@ -64,7 +112,10 @@ struct ModelCard: View {
     let index: Int
     let progress: Double?
     let isDownloading: Bool
+    let isConnecting: Bool
+    let isFailed: Bool
     let onAction: () -> Void
+    let onRetry: () -> Void
     let onDelete: () -> Void
 
     @State private var expanded = false
@@ -75,8 +126,14 @@ struct ModelCard: View {
             mainRow
                 .padding(20)
 
-            if isDownloading, let p = progress {
-                downloadProgress(p)
+            if isFailed {
+                failedRow
+            } else if isDownloading {
+                if isConnecting {
+                    connectingRow
+                } else if let p = progress {
+                    downloadProgressRow(p)
+                }
             }
 
             if model.isDownloaded && expanded {
@@ -201,6 +258,18 @@ struct ModelCard: View {
             ProgressView()
                 .tint(model.color1)
                 .frame(width: 44, height: 44)
+        } else if isFailed {
+            Button(action: onRetry) {
+                ZStack {
+                    Circle()
+                        .fill(Color(hex: "FF453A").opacity(0.12))
+                        .frame(width: 44, height: 44)
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(Color(hex: "FF453A"))
+                }
+            }
+            .buttonStyle(PressButtonStyle())
         } else if model.isDownloaded {
             Button(action: onAction) {
                 Image(systemName: "message.fill")
@@ -230,9 +299,51 @@ struct ModelCard: View {
         }
     }
 
+    // MARK: - Failed row
+
+    private var failedRow: some View {
+        VStack(spacing: 0) {
+            Divider().background(Color.borderHi)
+            HStack(spacing: 10) {
+                Image(systemName: "exclamationmark.circle.fill")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Color(hex: "FF453A"))
+                Text("Ошибка загрузки")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Color(hex: "FF453A").opacity(0.8))
+                Spacer()
+                Button(action: onRetry) {
+                    Text("Повторить")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Color(hex: "FF453A"))
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+        }
+    }
+
+    // MARK: - Connecting row
+
+    private var connectingRow: some View {
+        VStack(spacing: 0) {
+            Divider().background(Color.borderHi)
+            HStack(spacing: 10) {
+                ProgressView()
+                    .tint(model.color1)
+                    .scaleEffect(0.75)
+                Text("Подключение к серверу...")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Color.txt3)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+        }
+    }
+
     // MARK: - Download progress
 
-    private func downloadProgress(_ p: Double) -> some View {
+    private func downloadProgressRow(_ p: Double) -> some View {
         VStack(spacing: 10) {
             Divider().background(Color.borderHi)
             HStack(spacing: 12) {
@@ -240,12 +351,9 @@ struct ModelCard: View {
                     ZStack(alignment: .leading) {
                         Capsule().fill(Color.white.opacity(0.06)).frame(height: 4)
                         Capsule()
-                            .fill(LinearGradient(
-                                colors: [model.color1, model.color2],
-                                startPoint: .leading, endPoint: .trailing
-                            ))
+                            .fill(model.color1)
                             .frame(width: geo.size.width * p, height: 4)
-                            .animation(.easeOut(duration: 0.3), value: p)
+                            .animation(.easeOut(duration: 0.4), value: p)
                     }
                 }
                 .frame(height: 4)
