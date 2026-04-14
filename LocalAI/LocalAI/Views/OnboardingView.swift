@@ -2,9 +2,10 @@ import SwiftUI
 
 struct OnboardingView: View {
     @Binding var isDone: Bool
-    @State private var appeared = false
-    @State private var orbFloat = false
+    @State private var appeared  = false
+    @State private var orbFloat  = false
     @State private var ctaBreathe = false
+    @State private var ringRotate = false
 
     var body: some View {
         ZStack {
@@ -15,7 +16,7 @@ struct OnboardingView: View {
                 heroSection
                 Spacer()
                 featuresSection
-                Spacer()
+                Spacer(minLength: 36)
                 ctaButton
                     .padding(.bottom, 52)
             }
@@ -26,11 +27,14 @@ struct OnboardingView: View {
             withAnimation(.spring(response: 0.75, dampingFraction: 0.65).delay(0.1)) {
                 appeared = true
             }
-            withAnimation(.easeInOut(duration: 3.2).repeatForever(autoreverses: true).delay(0.8)) {
+            withAnimation(.easeInOut(duration: 3.4).repeatForever(autoreverses: true).delay(0.8)) {
                 orbFloat = true
             }
             withAnimation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true).delay(1.6)) {
                 ctaBreathe = true
+            }
+            withAnimation(.linear(duration: 14).repeatForever(autoreverses: false).delay(0.4)) {
+                ringRotate = true
             }
         }
     }
@@ -38,124 +42,193 @@ struct OnboardingView: View {
     // MARK: - Hero
 
     private var heroSection: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: 28) {
             ZStack {
-                // Glow halo — floats
+                // Outer glow — breathes
                 Circle()
-                    .fill(Color.violet.opacity(0.07))
-                    .frame(width: 180, height: 180)
-                    .blur(radius: 28)
-                    .scaleEffect(orbFloat ? 1.12 : 0.92)
+                    .fill(Color.violet.opacity(0.09))
+                    .frame(width: 210, height: 210)
+                    .blur(radius: 40)
+                    .scaleEffect(orbFloat ? 1.20 : 0.85)
 
-                // Ring
+                // Slow rotating arc
                 Circle()
-                    .strokeBorder(Color.violet.opacity(orbFloat ? 0.55 : 0.3), lineWidth: 1)
-                    .frame(width: 114, height: 114)
+                    .trim(from: 0, to: 0.65)
+                    .stroke(
+                        AngularGradient(
+                            colors: [Color.violet.opacity(0), Color.violet.opacity(0.55), Color.violet.opacity(0)],
+                            center: .center
+                        ),
+                        style: StrokeStyle(lineWidth: 1, lineCap: .round)
+                    )
+                    .frame(width: 156, height: 156)
+                    .rotationEffect(.degrees(ringRotate ? 360 : 0))
 
-                // Icon floats
+                // Static inner ring
+                Circle()
+                    .strokeBorder(Color.violet.opacity(orbFloat ? 0.32 : 0.14), lineWidth: 1)
+                    .frame(width: 112, height: 112)
+
+                // Icon backdrop
+                Circle()
+                    .fill(Color.violet.opacity(0.10))
+                    .frame(width: 86, height: 86)
+                    .overlay {
+                        Circle().strokeBorder(Color.violet.opacity(0.18), lineWidth: 0.5)
+                    }
+
+                // Icon — floats
                 Image(systemName: "brain.head.profile")
-                    .font(.system(size: 48, weight: .thin))
-                    .gradientForeground([.white, Color.violet], start: .top, end: .bottom)
+                    .font(.system(size: 40, weight: .thin))
+                    .foregroundStyle(
+                        LinearGradient(colors: [.white, Color.violet],
+                                       startPoint: .top, endPoint: .bottom)
+                    )
                     .offset(y: orbFloat ? -5 : 3)
             }
             .opacity(appeared ? 1 : 0)
-            .scaleEffect(appeared ? 1 : 0.55)
+            .scaleEffect(appeared ? 1 : 0.52)
 
             VStack(spacing: 10) {
                 Text("LocalAI")
-                    .font(.system(size: 52, weight: .black, design: .rounded))
-                    .gradientForeground([.white, Color.violet.opacity(0.8)])
-                    .glow(Color.violet, radius: 16)
+                    .font(.system(size: 54, weight: .black, design: .rounded))
+                    .gradientForeground([.white, Color.violet.opacity(0.72)])
+                    .glow(Color.violet, radius: 20)
 
                 Text("Нейросеть прямо\nна твоём iPhone")
-                    .font(.system(size: 20, weight: .medium))
+                    .font(.system(size: 18, weight: .medium))
                     .multilineTextAlignment(.center)
                     .foregroundStyle(Color.txt2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .opacity(appeared ? 1 : 0)
-            .offset(y: appeared ? 0 : 24)
+            .offset(y: appeared ? 0 : 22)
         }
     }
 
-    // MARK: - Features
+    // MARK: - Features (3-column grid)
 
     private var featuresSection: some View {
-        VStack(spacing: 12) {
-            OnboardingFeature(icon: "lock.fill", color: Color(hex: "34C759"),
-                              title: "100% приватно",
-                              subtitle: "Данные не покидают устройство никогда", delay: 0.12)
-            OnboardingFeature(icon: "wifi.slash", color: Color.orange,
-                              title: "Полный офлайн",
-                              subtitle: "Работает без интернета после загрузки", delay: 0.22)
-            OnboardingFeature(icon: "sparkles", color: Color.violet,
-                              title: "Уровень GPT-3.5",
-                              subtitle: "Мощные 7B модели прямо на iPhone", delay: 0.32)
+        HStack(spacing: 10) {
+            FeatureCell(
+                icon: "lock.fill",
+                color: Color(hex: "34C759"),
+                title: "Приватно",
+                sub: "Данные не\nпокидают\nустройство",
+                delay: 0.10
+            )
+            FeatureCell(
+                icon: "wifi.slash",
+                color: Color.orange,
+                title: "Офлайн",
+                sub: "Работает\nбез\nинтернета",
+                delay: 0.20
+            )
+            FeatureCell(
+                icon: "cpu",
+                color: Color.violet,
+                title: "GPT-3.5",
+                sub: "7B модели\nна твоём\niPhone",
+                delay: 0.30
+            )
         }
     }
 
     // MARK: - CTA
 
     private var ctaButton: some View {
-        Button {
-            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-            withAnimation(.spring(response: 0.45, dampingFraction: 0.62)) { isDone = true }
-        } label: {
-            HStack(spacing: 10) {
-                Text("Начать")
-                    .font(.system(size: 18, weight: .bold))
-                Image(systemName: "arrow.right")
-                    .font(.system(size: 16, weight: .bold))
-                    .offset(x: ctaBreathe ? 3 : 0)
+        VStack(spacing: 14) {
+            Button {
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                withAnimation(.spring(response: 0.45, dampingFraction: 0.62)) { isDone = true }
+            } label: {
+                HStack(spacing: 10) {
+                    Text("Начать")
+                        .font(.system(size: 18, weight: .bold))
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 15, weight: .bold))
+                        .offset(x: ctaBreathe ? 4 : 0)
+                }
+                // Dark text on bright teal — more distinctive than white on purple
+                .foregroundStyle(Color(hex: "07090F"))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 18)
+                .background {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(Color.violet)
+                        .shadow(
+                            color: Color.violet.opacity(ctaBreathe ? 0.40 : 0.18),
+                            radius: 22, y: 6
+                        )
+                }
             }
-            .foregroundStyle(.white)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 18)
-            .background {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(Color.violet)
-                    .opacity(ctaBreathe ? 1.0 : 0.88)
-                    .glow(Color.violet, radius: ctaBreathe ? 18 : 10)
-            }
+            .buttonStyle(PressButtonStyle())
+            .opacity(appeared ? 1 : 0)
+            .offset(y: appeared ? 0 : 22)
+            .scaleEffect(appeared ? 1 : 0.9)
+
+            Text("Бесплатно · Без регистрации · Без облака")
+                .font(.system(size: 12))
+                .foregroundStyle(Color.txt3)
+                .opacity(appeared ? 1 : 0)
         }
-        .buttonStyle(PressButtonStyle())
-        .opacity(appeared ? 1 : 0)
-        .offset(y: appeared ? 0 : 24)
-        .scaleEffect(appeared ? 1 : 0.9)
     }
 }
 
-private struct OnboardingFeature: View {
+// MARK: - Feature Cell
+
+private struct FeatureCell: View {
     let icon: String
     let color: Color
     let title: String
-    let subtitle: String
+    let sub: String
     let delay: Double
+
     @State private var appeared = false
 
     var body: some View {
-        HStack(spacing: 16) {
+        VStack(spacing: 12) {
             ZStack {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(color.opacity(0.13))
-                    .frame(width: 48, height: 48)
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .fill(color.opacity(0.12))
+                    .frame(width: 50, height: 50)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 13, style: .continuous)
+                            .strokeBorder(color.opacity(0.22), lineWidth: 0.5)
+                    }
                 Image(systemName: icon)
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(.system(size: 21, weight: .semibold))
                     .foregroundStyle(color)
-                    .scaleEffect(appeared ? 1 : 0.5)
+                    .scaleEffect(appeared ? 1 : 0.3)
             }
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.headline).foregroundStyle(Color.txt1)
-                Text(subtitle).font(.subheadline).foregroundStyle(Color.txt2)
+            VStack(spacing: 4) {
+                Text(title)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(Color.txt1)
+                Text(sub)
+                    .font(.system(size: 11))
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(Color.txt2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            Spacer()
         }
-        .padding(16)
-        .glassCard(radius: 16)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 20)
+        .padding(.horizontal, 8)
+        .background {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.surface)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .strokeBorder(Color.borderHi, lineWidth: 0.5)
+                }
+        }
         .opacity(appeared ? 1 : 0)
-        .offset(x: appeared ? 0 : -28)
+        .scaleEffect(appeared ? 1 : 0.86)
+        .offset(y: appeared ? 0 : 18)
         .onAppear {
-            withAnimation(.spring(response: 0.52, dampingFraction: 0.68).delay(delay + 0.35)) {
+            withAnimation(.spring(response: 0.52, dampingFraction: 0.68).delay(delay + 0.4)) {
                 appeared = true
             }
         }

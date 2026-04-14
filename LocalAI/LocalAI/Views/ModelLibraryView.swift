@@ -75,7 +75,9 @@ struct ModelLibraryView: View {
     }
 
     private var ramIndicator: some View {
-        let ramColor: Color = freeRAMGB > 3 ? Color(hex: "34C759")
+        let loaded = freeRAMGB > 0.05
+        let ramColor: Color = !loaded       ? Color.txt3
+                            : freeRAMGB > 3 ? Color(hex: "34C759")
                             : freeRAMGB > 1.5 ? Color(hex: "FF9F0A")
                             : Color(hex: "FF453A")
         return VStack(alignment: .trailing, spacing: 2) {
@@ -88,7 +90,7 @@ struct ModelLibraryView: View {
                     .foregroundStyle(Color.txt3)
             }
             HStack(alignment: .firstTextBaseline, spacing: 3) {
-                Text(String(format: "%.1f", freeRAMGB))
+                Text(loaded ? String(format: "%.1f", freeRAMGB) : "—")
                     .font(.system(size: 15, weight: .bold, design: .monospaced))
                     .foregroundStyle(ramColor)
                 Text("/ \(Int(totalRAMGB.rounded())) ГБ")
@@ -207,16 +209,16 @@ struct ModelCard: View {
                         .foregroundStyle(Color.txt1)
                     if let badge = model.badge {
                         Text(badge)
-                            .font(.system(size: 11, weight: .black))
-                            .tracking(0.3)
-                            .padding(.horizontal, 7)
+                            .font(.system(size: 10, weight: .black))
+                            .tracking(1.0)
+                            .padding(.horizontal, 8)
                             .padding(.vertical, 3)
                             .background(
                                 Capsule()
-                                    .fill(model.color1.opacity(0.2))
-                                    .overlay(Capsule().strokeBorder(model.color1.opacity(0.4), lineWidth: 0.5))
+                                    .fill(Color(hex: "F5A623").opacity(0.14))
+                                    .overlay(Capsule().strokeBorder(Color(hex: "F5A623").opacity(0.45), lineWidth: 0.5))
                             )
-                            .foregroundStyle(model.color1)
+                            .foregroundStyle(Color(hex: "F5A623"))
                     }
                     if model.isDownloaded {
                         Circle()
@@ -226,9 +228,10 @@ struct ModelCard: View {
                     }
                 }
                 Text(model.subtitle)
-                    .font(.system(size: 13))
+                    .font(.system(size: 12))
                     .foregroundStyle(Color.txt2)
-                    .lineLimit(1)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 // Size tag
                 HStack(spacing: 6) {

@@ -3,20 +3,20 @@ import SwiftUI
 // MARK: - Color Palette
 
 extension Color {
-    static let bg         = Color(hex: "08080E")
-    static let surface    = Color(hex: "0F0F1B")
-    static let surfaceHi  = Color(hex: "161625")
+    static let bg         = Color(hex: "07090F")   // cold dark — no purple tint
+    static let surface    = Color(hex: "0D1020")
+    static let surfaceHi  = Color(hex: "141828")
     static let border     = Color.white.opacity(0.06)
-    static let borderHi   = Color.white.opacity(0.09)
+    static let borderHi   = Color.white.opacity(0.10)
     static let txt1       = Color.white
     static let txt2       = Color.white.opacity(0.40)
-    static let txt3       = Color.white.opacity(0.18)
+    static let txt3       = Color.white.opacity(0.17)
 
-    // One calm accent — soft indigo. All "violet/pink/cyan" map here.
-    static let violet     = Color(hex: "7B7EF8")
-    static let pink       = Color(hex: "9D8DF5")   // was hot pink → soft lavender
-    static let cyan       = Color(hex: "7B7EF8")   // collapsed into accent
-    static let orange     = Color(hex: "D4884A")   // warm, desaturated
+    // Main accent — electric teal. Not purple like every other AI app.
+    static let violet     = Color(hex: "00D4B8")   // teal (name kept for compatibility)
+    static let pink       = Color(hex: "E879A0")   // rose
+    static let cyan       = Color(hex: "00D4B8")   // same as accent
+    static let orange     = Color(hex: "FF8847")   // warm orange
 }
 
 // MARK: - Model accent helpers
@@ -99,12 +99,12 @@ struct AmbientBackground: View {
     var body: some View {
         ZStack {
             Color.bg.ignoresSafeArea()
-            // One faint tint in top-left corner — barely visible
+            // Faint teal tint — top-left corner
             RadialGradient(
-                colors: [Color(hex: "7B7EF8").opacity(0.055), .clear],
-                center: .init(x: 0.3, y: 0.1),
+                colors: [Color(hex: "00D4B8").opacity(0.05), .clear],
+                center: .init(x: 0.25, y: 0.08),
                 startRadius: 0,
-                endRadius: 420
+                endRadius: 440
             )
             .ignoresSafeArea()
         }
