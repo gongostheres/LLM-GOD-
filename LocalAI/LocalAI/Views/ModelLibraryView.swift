@@ -376,7 +376,16 @@ struct ModelCard: View {
                     .frame(width: 40, alignment: .trailing)
             }
             .padding(.horizontal, 20)
-            .padding(.bottom, 16)
+
+            // Hint: screen-lock kills the download
+            HStack(spacing: 5) {
+                Image(systemName: "lock.open")
+                    .font(.system(size: 10))
+                Text("Не блокируйте экран во время загрузки")
+                    .font(.system(size: 11))
+            }
+            .foregroundStyle(Color.txt3)
+            .padding(.bottom, 14)
         }
     }
 

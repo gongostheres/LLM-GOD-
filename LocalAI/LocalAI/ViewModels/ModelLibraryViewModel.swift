@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import UIKit
 
 @Observable
 final class ModelLibraryViewModel {
@@ -12,6 +13,10 @@ final class ModelLibraryViewModel {
     var errorMessage: String?
 
     private let key = "downloaded_model_ids"
+    // One watchdog Task per active download — cancelled in endDownload
+    private var watchdogs: [String: Task<Void, Never>] = [:]
+    // Background task tokens — keep iOS from suspending us mid-download
+    private var bgTaskIds: [String: UIBackgroundTaskIdentifier] = [:]
 
     init() { reload() }
 
@@ -31,29 +36,40 @@ final class ModelLibraryViewModel {
         connectingIds.insert(model.id)
         downloadProgress[model.id] = 0
 
+        // Prevent screen from locking — iOS kills URLSession network when display sleeps
+        UIApplication.shared.isIdleTimerDisabled = true
+
+        // Request background execution time so download survives going to background
+        let bgTask = UIApplication.shared.beginBackgroundTask(withName: "localai-dl-\(model.id)") {
+            // Expiration handler: system is about to suspend — nothing we can do, let it fail
+        }
+        bgTaskIds[model.id] = bgTask
+
         Task {
             do {
                 try await InferenceService.shared.preloadModel(model) { [weak self] completed, total, fileFraction in
                     Task { @MainActor [weak self] in
                         guard let self else { return }
 
-                        // First callback — leave connecting state
+                        // First callback — leave connecting state and arm the stall watchdog
                         if self.connectingIds.contains(model.id) {
                             self.connectingIds.remove(model.id)
+                            self.armWatchdog(for: model.id)
                         }
 
                         // Smooth progress: completed files + byte-fraction of current file
-                        // Prevents "frozen" bar while a large shard is mid-download
                         let fraction: Double
                         if total > 0 {
                             fraction = min((Double(completed) + fileFraction) / Double(total), 1.0)
                         } else {
-                            fraction = 0
+                            fraction = fileFraction   // fall back to per-file fraction
                         }
                         self.downloadProgress[model.id] = fraction
                     }
                 }
                 await markDownloaded(model.id)
+            } catch is CancellationError {
+                // Watchdog cancelled us — error already set, endDownload will clean up
             } catch {
                 await fail(model.id, message: error.localizedDescription)
             }
@@ -71,6 +87,43 @@ final class ModelLibraryViewModel {
         setDownloaded(model.id, value: false)
     }
 
+    // MARK: - Watchdog
+
+    /// Cancels the download after 90 seconds of zero progress — surfaces a clear error.
+    @MainActor
+    private func armWatchdog(for modelId: String) {
+        watchdogs[modelId]?.cancel()
+        watchdogs[modelId] = Task { @MainActor [weak self] in
+            var lastProgress: Double = 0
+            var stallSeconds = 0
+
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(nanoseconds: 15_000_000_000) // check every 15 s
+                } catch {
+                    return // Task was cancelled — clean exit
+                }
+
+                guard let self, self.downloadingIds.contains(modelId) else { return }
+
+                let current = self.downloadProgress[modelId] ?? 0
+                let moved = abs(current - lastProgress) > 0.004 // > 0.4% counts as progress
+                lastProgress = current
+
+                if moved {
+                    stallSeconds = 0
+                } else {
+                    stallSeconds += 15
+                    if stallSeconds >= 90 {
+                        self.fail(modelId, message: "Загрузка зависла. Проверьте интернет и нажмите «Повторить».")
+                        self.endDownload(modelId)
+                        return
+                    }
+                }
+            }
+        }
+    }
+
     // MARK: - Private
 
     @MainActor private func markDownloaded(_ id: String) { setDownloaded(id, value: true) }
@@ -79,7 +132,21 @@ final class ModelLibraryViewModel {
         downloadingIds.remove(id)
         connectingIds.remove(id)
         downloadProgress.removeValue(forKey: id)
-        // keep failedIds as-is so UI can show retry
+        // keep failedIds so UI shows retry
+
+        // Cancel watchdog
+        watchdogs[id]?.cancel()
+        watchdogs.removeValue(forKey: id)
+
+        // End background task token
+        if let token = bgTaskIds.removeValue(forKey: id) {
+            UIApplication.shared.endBackgroundTask(token)
+        }
+
+        // Re-enable idle timer once all downloads are done
+        if downloadingIds.isEmpty {
+            UIApplication.shared.isIdleTimerDisabled = false
+        }
     }
 
     @MainActor private func fail(_ id: String, message: String) {
